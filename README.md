@@ -6,7 +6,7 @@ a QML frontend plus a Go backend, built on a small shared framework.
 
 | Game | |
 |---|---|
-| [chess](games/chess) | Port of [chessMarkable](https://github.com/LinusCDE/chessmarkable), with [Stockfish](https://stockfishchess.org) as the bot |
+| [chess](games/chess) | Chess with [Stockfish](https://stockfishchess.org) as the bot, save slots and a PGN viewer |
 | [sudoku](games/sudoku) | Generated puzzles in four difficulties, with notes, hints and stats |
 | [mahjong](games/mahjong) | Mahjong solitaire on three layouts; every deal can be cleared |
 | [blackjack](games/blackjack) | You against the dealer, with basic strategy hints; landscape |
@@ -194,14 +194,13 @@ See the header of the file for usage.
 
 ## Credits and licenses
 
-- [chessMarkable](https://github.com/LinusCDE/chessmarkable) by Linus K. and contributors (MIT, `LICENSE.chessmarkable`): the chess game this port is based on, its artwork, and the PGN viewer by [@rmadhwal](https://github.com/rmadhwal).
 - Crossword: the letter recognizer is trained on [EMNIST](https://www.nist.gov/itl/products-and-services/emnist-dataset) (NIST);
   [goja](https://github.com/dop251/goja) (MIT) runs Cruzadas Clube's puzzle scripts;
   the AmuseLabs decoding follows [kotwords](https://github.com/jpd236/kotwords) and [xword-dl](https://github.com/thisisparker/xword-dl) (Apache-2.0).
   Downloaded puzzles belong to their publishers.
 - The card suits are outlines from [DejaVu Sans](https://dejavu-fonts.github.io) (`tools/make_suits.py`).
 - The mahjong tiles' characters are outlines from [Noto Sans CJK](https://github.com/notofonts/noto-cjk) (SIL Open Font License).
-- The chess pieces are from [pixabay](https://pixabay.com/vectors/chess-pieces-set-symbols-game-26774/), traced to SVG by `games/chess/trace_pieces.sh`.
+- The chess pieces are [Cburnett's](https://commons.wikimedia.org/wiki/Category:SVG_chess_pieces) from Wikimedia Commons (GPL-2.0-or-later, also BSD, GFDL and CC BY-SA 3.0).
 - [notnil/chess](https://github.com/notnil/chess) (MIT): chess rules and PGN parsing.
 - [Stockfish](https://github.com/official-stockfish/Stockfish) (GPL-3.0): built from the official source by `games/chess/stockfish.sh` and shipped as a separate program.
 - [AppLoad](https://github.com/asivery/rmpp-appload) and [appload-rmstream](https://github.com/asivery/appload-rmstream) by asivery.

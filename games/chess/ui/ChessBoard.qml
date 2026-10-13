@@ -2,7 +2,7 @@ import QtQuick 2.5
 
 // The 8x8 board. Squares are indexed like the backend: 0 = A1, 7 = H1, 63 = H8.
 //
-// Pieces are moved like in chessMarkable, either by
+// Pieces are moved either by
 //  1. tapping a piece, then the square it should go to (shows the possible moves), or
 //  2. pressing a piece and releasing the finger on the destination square.
 Item {
@@ -36,11 +36,6 @@ Item {
         "B": "bishop-white", "N": "knight-white", "P": "pawn-white",
         "k": "king-black", "q": "queen-black", "r": "rook-black",
         "b": "bishop-black", "n": "knight-black", "p": "pawn-black"
-    })
-    // Relative size of the original piece images, so pawns stay smaller than kings.
-    readonly property var pieceScale: ({
-        "K": 91, "Q": 95, "R": 81, "B": 96, "N": 82, "P": 81,
-        "k": 91, "q": 97, "r": 81, "b": 96, "n": 83, "p": 81
     })
 
     function pieceAt(square) {
@@ -142,24 +137,20 @@ Item {
                     color: (row + col) % 2 === 0 ? board.lightColor : board.darkColor
                 }
 
-                Image {
+                // The last move: a thin frame where it came from, a thick one where it went
+                Rectangle {
+                    readonly property bool from: hasLastMove && board.lastMove[0] === square
+                    readonly property bool to: hasLastMove && board.lastMove[1] === square
                     anchors.fill: parent
-                    visible: hasLastMove && board.lastMove[0] === square
-                    source: "res/piece-moved-from.png"
-                    smooth: true
-                    mipmap: true
+                    visible: from || to
+                    color: "transparent"
+                    border.width: Math.round(board.squareSize * (to ? 0.07 : 0.035))
+                    border.color: "#303030"
                 }
 
                 Image {
-                    anchors.fill: parent
-                    visible: hasLastMove && board.lastMove[1] === square
-                    source: "res/piece-moved-to.png"
-                    smooth: true
-                    mipmap: true
-                }
-
-                Image {
-                    readonly property real size: Math.round(board.squareSize * 0.8 * (board.pieceScale[piece] || 97) / 97)
+                    // The pieces are drawn in 45x45 squares, small ones smaller
+                    readonly property real size: Math.round(board.squareSize * 0.95)
                     anchors.centerIn: parent
                     width: size
                     height: size
@@ -171,13 +162,14 @@ Item {
                     smooth: true
                 }
 
-                Image {
+                // The selected piece
+                Rectangle {
                     anchors.fill: parent
-                    anchors.margins: board.squareSize / 20
+                    anchors.margins: Math.round(board.squareSize * 0.04)
                     visible: board.selected === square && piece !== "."
-                    source: "res/piece-selected.png"
-                    smooth: true
-                    mipmap: true
+                    color: "transparent"
+                    border.width: Math.round(board.squareSize * 0.08)
+                    border.color: "black"
                 }
 
                 // Possible destination: a dot, or a ring around a piece that can be captured

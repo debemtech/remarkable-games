@@ -40,7 +40,6 @@ blackjack-$pkgver.tar.gz::$_release/blackjack-rmpp.tar.gz
 solitaire-$pkgver.tar.gz::$_release/solitaire-rmpp.tar.gz
 crossword-$pkgver.tar.gz::$_release/crossword-rmpp.tar.gz
 LICENSE-$pkgver::https://raw.githubusercontent.com/$upstream_author/remarkable-games/v$pkgver/LICENSE
-LICENSE.chessmarkable-$pkgver::https://raw.githubusercontent.com/$upstream_author/remarkable-games/v$pkgver/LICENSE.chessmarkable
 "
 options="!check !strip"
 
@@ -63,12 +62,7 @@ _licenses() {
 _chess() {
 	pkgdesc="Chess against Stockfish or a friend, with save slots and a PGN viewer (AppLoad)"
 	depends="$_depends"
-	package() {
-		_game chess
-		# A port of chessMarkable (MIT); includes Stockfish (GPL-3.0)
-		install -Dm644 "$srcdir"/LICENSE.chessmarkable-$pkgver \
-			"$subpkgdir"/home/root/.vellum/licenses/$subpkgname/LICENSE.chessmarkable
-	}
+	package() { _game chess; } # includes Stockfish (GPL-3.0)
 	postdeinstall() { [ "$VELLUM_PURGE" != "1" ] || rm -rf /home/root/.config/chess; }
 }
 

@@ -93,7 +93,7 @@ func (m *match) botMove(uciMove string) error {
 	return m.play(mv)
 }
 
-// undo takes back the last move of each local player, like chessMarkable:
+// undo takes back the last move of each local player:
 // one move in PvP; against the bot your move and the bot's answer.
 func (m *match) undo() error {
 	count := 1

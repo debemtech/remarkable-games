@@ -1,6 +1,6 @@
 # Chess
 
-A port of [chessMarkable](https://github.com/LinusCDE/chessmarkable) by LinusCDE.
+Chess against [Stockfish](https://stockfishchess.org) or a friend.
 
 - Player vs Player, optionally with the pieces turned around on black's turn for two players sitting opposite each other
 - Player vs Bot (Easy / Normal / Hard), played by Stockfish 19

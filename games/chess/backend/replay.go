@@ -77,7 +77,7 @@ func readPGN(dir, name string) ([]*chess.Game, error) {
 	return games, nil
 }
 
-// describeGame is "White vs Black at Event Round", like chessMarkable showed it.
+// describeGame is "White vs Black at Event Round".
 func describeGame(g *chess.Game) string {
 	tag := func(key string) string {
 		if t := g.GetTagPair(key); t != nil && t.Value != "" {
