@@ -1,25 +1,24 @@
 name: Build
 
-# Only pushes and tags, no pull requests: the runner is our own machine and
-# must not run code from forks.
 on:
   push:
     branches: ['**']
     tags: ['*']
+  pull_request:
 
 env:
   GAMES: chess sudoku mahjong blackjack solitaire crossword
 
-# Runs on our own runner (bix), which has the tools installed:
-#   apt install qt6-base-dev-tools g++-aarch64-linux-gnu stockfish
 jobs:
   test:
-    runs-on: [self-hosted, bix]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Install Stockfish
+        run: sudo apt-get update && sudo apt-get install -y stockfish
       - name: Test
         run: |
           test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
@@ -28,12 +27,16 @@ jobs:
 
   build:
     needs: test
-    runs-on: [self-hosted, bix]
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-base-dev-tools g++-aarch64-linux-gnu
       - uses: actions/cache@v4
         with:
           path: build/cache
@@ -52,7 +55,7 @@ jobs:
   release:
     if: startsWith(github.ref, 'refs/tags/')
     needs: build
-    runs-on: [self-hosted, bix]
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
