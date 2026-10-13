@@ -1,0 +1,116 @@
+maintainer="Rafael de Bem <debemrafael@gmail.com>"
+pkgname=appload-debem-games
+pkgver=0.1.0
+pkgrel=0
+upstream_author="debemtech"
+category="apps"
+pkgdesc="Chess, Sudoku, Mahjong, Blackjack, Solitaire and Crossword for AppLoad"
+url="https://github.com/$upstream_author/remarkable-games"
+arch="aarch64"
+license="GPL-3.0-only"
+# Built and tested for the Paper Pro only
+_depends="appload !rmppm !rmppure"
+# This package installs all six games, or each can be installed alone
+depends="$_depends
+	appload-debem-chess
+	appload-debem-sudoku
+	appload-debem-mahjong
+	appload-debem-blackjack
+	appload-debem-solitaire
+	appload-debem-crossword
+"
+readmeurl="https://raw.githubusercontent.com/$upstream_author/remarkable-games/v$pkgver/README.md"
+
+subpackages="
+	appload-debem-chess:_chess
+	appload-debem-sudoku:_sudoku
+	appload-debem-mahjong:_mahjong
+	appload-debem-blackjack:_blackjack
+	appload-debem-solitaire:_solitaire
+	appload-debem-crossword:_crossword
+"
+
+# The games as built by the project's CI for the Paper Pro
+_release="$url/releases/download/v$pkgver"
+source="
+chess-$pkgver.tar.gz::$_release/chess-rmpp.tar.gz
+sudoku-$pkgver.tar.gz::$_release/sudoku-rmpp.tar.gz
+mahjong-$pkgver.tar.gz::$_release/mahjong-rmpp.tar.gz
+blackjack-$pkgver.tar.gz::$_release/blackjack-rmpp.tar.gz
+solitaire-$pkgver.tar.gz::$_release/solitaire-rmpp.tar.gz
+crossword-$pkgver.tar.gz::$_release/crossword-rmpp.tar.gz
+LICENSE-$pkgver::https://raw.githubusercontent.com/$upstream_author/remarkable-games/v$pkgver/LICENSE
+LICENSE.chessmarkable-$pkgver::https://raw.githubusercontent.com/$upstream_author/remarkable-games/v$pkgver/LICENSE.chessmarkable
+"
+options="!check !strip"
+
+package() {
+	_licenses "$pkgdir" "$pkgname"
+}
+
+# Installs one game into AppLoad, with the licenses
+_game() {
+	install -d "$subpkgdir"/home/root/xovi/exthome/appload
+	cp -r "$srcdir/$1-rmpp" "$subpkgdir/home/root/xovi/exthome/appload/$1"
+	_licenses "$subpkgdir" "$subpkgname"
+}
+
+_licenses() {
+	install -Dm644 "$srcdir"/LICENSE-$pkgver "$1"/home/root/.vellum/licenses/$2/LICENSE
+	echo "$url" > "$1"/home/root/.vellum/licenses/$2/SOURCES
+}
+
+_chess() {
+	pkgdesc="Chess against Stockfish or a friend, with save slots and a PGN viewer (AppLoad)"
+	depends="$_depends"
+	package() {
+		_game chess
+		# A port of chessMarkable (MIT); includes Stockfish (GPL-3.0)
+		install -Dm644 "$srcdir"/LICENSE.chessmarkable-$pkgver \
+			"$subpkgdir"/home/root/.vellum/licenses/$subpkgname/LICENSE.chessmarkable
+	}
+	postdeinstall() {
+		# The folder is shared with chessMarkable's savestates.yml: only our files
+		if [ "$VELLUM_PURGE" = "1" ]; then
+			rm -rf /home/root/.config/chessmarkable/slots.json /home/root/.config/chessmarkable/pgn
+		fi
+	}
+}
+
+_sudoku() {
+	pkgdesc="Sudoku with notes, colors and four difficulties (AppLoad)"
+	depends="$_depends"
+	package() { _game sudoku; }
+	postdeinstall() { [ "$VELLUM_PURGE" != "1" ] || rm -rf /home/root/.config/sudoku; }
+}
+
+_mahjong() {
+	pkgdesc="Mahjong solitaire (AppLoad)"
+	depends="$_depends"
+	package() { _game mahjong; }
+	postdeinstall() { [ "$VELLUM_PURGE" != "1" ] || rm -rf /home/root/.config/mahjong; }
+}
+
+_blackjack() {
+	pkgdesc="Blackjack against the dealer, played in landscape (AppLoad)"
+	depends="$_depends"
+	package() { _game blackjack; }
+	postdeinstall() { [ "$VELLUM_PURGE" != "1" ] || rm -rf /home/root/.config/blackjack; }
+}
+
+_solitaire() {
+	pkgdesc="Klondike and FreeCell solitaire, played in landscape (AppLoad)"
+	depends="$_depends"
+	package() { _game solitaire; }
+	postdeinstall() { [ "$VELLUM_PURGE" != "1" ] || rm -rf /home/root/.config/solitaire; }
+}
+
+_crossword() {
+	pkgdesc="Crosswords written with the pen, free puzzles in English and Portuguese (AppLoad)"
+	depends="$_depends"
+	package() { _game crossword; }
+	postdeinstall() { [ "$VELLUM_PURGE" != "1" ] || rm -rf /home/root/.config/crossword; }
+}
+
+sha512sums="
+"
