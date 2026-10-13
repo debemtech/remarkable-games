@@ -70,12 +70,13 @@ type slots struct {
 	Saves [slotCount]*savedGame `json:"saves"`
 }
 
-func loadSlots(dir string) (*slots, error) {
+func loadSlots(dir, legacyDir string) (*slots, error) {
 	s := &slots{path: filepath.Join(dir, "slots.json")}
+	moveOldFiles(dir, legacyDir)
 	err := store.Load(s.path, s)
 	if errors.Is(err, fs.ErrNotExist) {
 		// First start: take over the savestates of chessMarkable on the rM1/rM2.
-		return s, s.importLegacy(filepath.Join(dir, "savestates.yml"))
+		return s, s.importLegacy(filepath.Join(legacyDir, "savestates.yml"))
 	}
 	if err != nil {
 		return s, fmt.Errorf("reading %s: %w", s.path, err)
@@ -109,6 +110,18 @@ func (s *slots) message() slotsMessage {
 		msg.Slots = append(msg.Slots, info)
 	}
 	return msg
+}
+
+// moveOldFiles moves the slots and PGN files that versions before 0.1.1 kept
+// in chessMarkable's folder (shared with chessMarkable) to our own.
+func moveOldFiles(dir, legacyDir string) {
+	if _, err := os.Stat(filepath.Join(dir, "slots.json")); err == nil {
+		return
+	}
+	os.MkdirAll(dir, 0o755)
+	for _, name := range []string{"slots.json", "pgn"} {
+		os.Rename(filepath.Join(legacyDir, name), filepath.Join(dir, name))
+	}
 }
 
 // importLegacy reads chessMarkable's savestates.yml, which looks like

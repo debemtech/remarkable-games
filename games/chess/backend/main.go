@@ -17,7 +17,8 @@ import (
 )
 
 type config struct {
-	dataDir   string // savestates
+	dataDir   string // save slots
+	legacyDir string // chessMarkable's, to import its savestates.yml
 	pgnDir    string
 	stockfish string
 	botDelay  time.Duration
@@ -39,7 +40,7 @@ type chessApp struct {
 func newChessApp(app *appload.App, cfg config) *chessApp {
 	c := &chessApp{app: app, cfg: cfg, bot: &bot{path: cfg.stockfish, minDelay: cfg.botDelay}}
 	var err error
-	if c.slots, err = loadSlots(cfg.dataDir); err != nil {
+	if c.slots, err = loadSlots(cfg.dataDir, cfg.legacyDir); err != nil {
 		// Keep the broken file for the user; it gets replaced on the next save.
 		app.Log.Error("loading save slots", "err", err)
 		os.Rename(c.slots.path, c.slots.path+".broken")
@@ -250,7 +251,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	cfg := config{dataDir: store.Dir("chessmarkable"), botDelay: time.Second}
+	cfg := config{dataDir: store.Dir("chess"), legacyDir: store.Dir("chessmarkable"), botDelay: time.Second}
 	cfg.pgnDir = filepath.Join(cfg.dataDir, "pgn")
 	// Stockfish ships next to the backend; CHESS_STOCKFISH overrides it for testing on a PC.
 	if cfg.stockfish = os.Getenv("CHESS_STOCKFISH"); cfg.stockfish == "" {

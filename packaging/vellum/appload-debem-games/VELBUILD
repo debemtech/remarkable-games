@@ -69,12 +69,7 @@ _chess() {
 		install -Dm644 "$srcdir"/LICENSE.chessmarkable-$pkgver \
 			"$subpkgdir"/home/root/.vellum/licenses/$subpkgname/LICENSE.chessmarkable
 	}
-	postdeinstall() {
-		# The folder is shared with chessMarkable's savestates.yml: only our files
-		if [ "$VELLUM_PURGE" = "1" ]; then
-			rm -rf /home/root/.config/chessmarkable/slots.json /home/root/.config/chessmarkable/pgn
-		fi
-	}
+	postdeinstall() { [ "$VELLUM_PURGE" != "1" ] || rm -rf /home/root/.config/chess; }
 }
 
 _sudoku() {

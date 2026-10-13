@@ -129,14 +129,18 @@ func TestLegacySavestates(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "savestates.yml"), []byte(
 		"slot_1: ~\nslot_2: 4k3/1P6/8/8/8/8/8/4K3 w - - 0 1\nslot_3: not a fen\n"), 0o644)
-	h := start(t, config{dataDir: dir})
+	data := t.TempDir()
+	h := start(t, config{dataDir: data, legacyDir: dir})
 	h.Send(msgGetSlots, nil)
 	slots := apptest.Expect[slotsMessage](h.Host, msgSlots, nil)
 	if slots.Slots[0].Saved || !slots.Slots[1].Saved || slots.Slots[2].Saved {
 		t.Fatalf("legacy import failed: %+v", slots)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "slots.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(data, "slots.json")); err != nil {
 		t.Fatal("slots.json not written")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "slots.json")); err == nil {
+		t.Fatal("wrote into chessMarkable's folder")
 	}
 }
 
@@ -277,4 +281,25 @@ func TestBotMissing(t *testing.T) {
 	}
 	h.Send(msgUndo, nil)
 	apptest.Expect(h.Host, msgGameState, func(s gameState) bool { return s.Turn == "white" && len(s.Moves) > 0 })
+}
+
+// Slots and PGNs that older versions kept in chessMarkable's folder move to ours.
+func TestMoveOldFiles(t *testing.T) {
+	old, data := t.TempDir(), t.TempDir()
+	h := start(t, config{dataDir: old})
+	h.Send(msgNewGame, newGameRequest{Mode: "pvp", Slot: 1, Reset: true})
+	apptest.Expect(h.Host, msgGameState, func(s gameState) bool { return s.Active })
+	h.play("e2e4")
+	os.MkdirAll(filepath.Join(old, "pgn"), 0o755)
+	os.WriteFile(filepath.Join(old, "pgn", "games.pgn"), []byte(samplePGN), 0o644)
+
+	h2 := start(t, config{dataDir: data, legacyDir: old})
+	h2.Send(msgGetSlots, nil)
+	slots := apptest.Expect[slotsMessage](h2.Host, msgSlots, nil)
+	if !slots.Slots[0].Saved {
+		t.Fatalf("slot 1 not moved: %+v", slots)
+	}
+	if _, err := os.Stat(filepath.Join(data, "pgn", "games.pgn")); err != nil {
+		t.Fatal("PGN files not moved")
+	}
 }
