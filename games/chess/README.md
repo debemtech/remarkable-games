@@ -1,4 +1,4 @@
-# chessMarkable
+# Chess
 
 A port of [chessMarkable](https://github.com/LinusCDE/chessmarkable) by LinusCDE.
 

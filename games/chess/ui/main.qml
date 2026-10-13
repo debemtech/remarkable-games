@@ -2,11 +2,11 @@ import QtQuick 2.5
 import "framework"
 import "Protocol.js" as Protocol
 
-// chessMarkable. This file holds the state sent by the backend and switches
+// Chess. This file holds the state sent by the backend and switches
 // screens; the screens only render it.
 GameApp {
     id: root
-    appId: "chessmarkable"
+    appId: "chess"
     screen: "menu" // menu, slots, game, pgns, games, replay
 
     property string pendingMode: "pvp"
@@ -97,7 +97,7 @@ GameApp {
         anchors.fill: parent
         app: root
         visible: root.screen === "pgns"
-        title: "chessMarkable"
+        title: "Chess"
         heading: "Choose PGN:"
         items: root.pgnFiles
         emptyText: "No PGNs found, please add them to:\n" + root.pgnDir
@@ -110,7 +110,7 @@ GameApp {
         anchors.fill: parent
         app: root
         visible: root.screen === "games"
-        title: "chessMarkable"
+        title: "Chess"
         heading: "Choose Game:"
         items: root.pgnGames
         emptyText: root.pgnError !== "" ? root.pgnError : "Couldn't parse any games from PGN"

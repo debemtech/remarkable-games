@@ -14,7 +14,7 @@ Item {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: "chessMarkable"
+            text: "Chess"
             font.pixelSize: 9 * menu.u
             font.bold: true
         }

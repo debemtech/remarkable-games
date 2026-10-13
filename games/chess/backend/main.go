@@ -1,4 +1,4 @@
-// The backend of chessMarkable for AppLoad: chess rules, save slots and PGN
+// The backend of Chess for AppLoad: chess rules, save slots and PGN
 // replays, with Stockfish as the bot. The QML frontend only renders.
 package main
 

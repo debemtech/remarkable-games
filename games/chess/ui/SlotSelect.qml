@@ -19,7 +19,7 @@ Item {
 
         Text {
             anchors.horizontalCenter: parent.horizontalCenter
-            text: "chessMarkable"
+            text: "Chess"
             font.pixelSize: 9 * slotScreen.u
             font.bold: true
         }

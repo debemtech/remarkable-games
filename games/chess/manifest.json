@@ -1,8 +1,8 @@
 {
-    "name": "chessMarkable",
+    "name": "Chess",
     "loadsBackend": true,
     "entry": "/ui/main.qml",
-    "id": "chessmarkable",
+    "id": "chess",
     "supportsScaling": false,
     "canHaveMultipleFrontends": false
 }
