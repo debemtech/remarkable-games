@@ -9,16 +9,16 @@ on:
 env:
   GAMES: chess sudoku mahjong blackjack solitaire crossword
 
+# Runs on our own runner (bix), which has the tools installed:
+#   apt install qt6-base-dev-tools g++-aarch64-linux-gnu stockfish
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, bix]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install Stockfish
-        run: sudo apt-get update && sudo apt-get install -y stockfish
       - name: Test
         run: |
           test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
@@ -27,44 +27,37 @@ jobs:
 
   build:
     needs: test
-    runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        device: [rmpp, rm2]
+    runs-on: [self-hosted, bix]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      - name: Install tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y qt6-base-dev-tools g++-aarch64-linux-gnu g++-arm-linux-gnueabihf
       - uses: actions/cache@v4
         with:
           path: build/cache
-          key: stockfish-${{ matrix.device }}-${{ hashFiles('games/chess/stockfish.sh') }}
+          key: stockfish-rmpp-${{ hashFiles('games/chess/stockfish.sh') }}
       - name: Build
         run: |
           for game in $GAMES; do
-            ./build.sh "$game" ${{ matrix.device }}
-            tar -czf "build/$game-${{ matrix.device }}.tar.gz" -C build "$game-${{ matrix.device }}"
+            ./build.sh "$game" rmpp
+            tar -czf "build/$game-rmpp.tar.gz" -C build "$game-rmpp"
           done
       - uses: actions/upload-artifact@v4
         with:
-          name: games-${{ matrix.device }}
+          name: games-rmpp
           path: build/*.tar.gz
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, bix]
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          merge-multiple: true
+          name: games-rmpp
       - uses: softprops/action-gh-release@v2
         with:
           files: '*.tar.gz'
