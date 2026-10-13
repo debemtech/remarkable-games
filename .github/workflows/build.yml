@@ -1,10 +1,11 @@
 name: Build
 
+# Only pushes and tags, no pull requests: the runner is our own machine and
+# must not run code from forks.
 on:
   push:
     branches: ['**']
     tags: ['*']
-  pull_request:
 
 env:
   GAMES: chess sudoku mahjong blackjack solitaire crossword
