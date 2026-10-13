@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -70,13 +68,11 @@ type slots struct {
 	Saves [slotCount]*savedGame `json:"saves"`
 }
 
-func loadSlots(dir, legacyDir string) (*slots, error) {
+func loadSlots(dir string) (*slots, error) {
 	s := &slots{path: filepath.Join(dir, "slots.json")}
-	moveOldFiles(dir, legacyDir)
 	err := store.Load(s.path, s)
 	if errors.Is(err, fs.ErrNotExist) {
-		// First start: take over the savestates of chessMarkable on the rM1/rM2.
-		return s, s.importLegacy(filepath.Join(legacyDir, "savestates.yml"))
+		return s, nil // first start
 	}
 	if err != nil {
 		return s, fmt.Errorf("reading %s: %w", s.path, err)
@@ -110,53 +106,4 @@ func (s *slots) message() slotsMessage {
 		msg.Slots = append(msg.Slots, info)
 	}
 	return msg
-}
-
-// moveOldFiles moves the slots and PGN files that versions before 0.1.1 kept
-// in chessMarkable's folder (shared with chessMarkable) to our own.
-func moveOldFiles(dir, legacyDir string) {
-	if _, err := os.Stat(filepath.Join(dir, "slots.json")); err == nil {
-		return
-	}
-	os.MkdirAll(dir, 0o755)
-	for _, name := range []string{"slots.json", "pgn"} {
-		os.Rename(filepath.Join(legacyDir, name), filepath.Join(dir, name))
-	}
-}
-
-// importLegacy reads chessMarkable's savestates.yml, which looks like
-//
-//	slot_1: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
-//	slot_2: ~
-func (s *slots) importLegacy(path string) error {
-	f, err := os.Open(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		key, value, ok := strings.Cut(scanner.Text(), ":")
-		if !ok {
-			continue
-		}
-		var slot int
-		if _, err := fmt.Sscanf(strings.TrimSpace(key), "slot_%d", &slot); err != nil || slot < 1 || slot > slotCount {
-			continue
-		}
-		fen := strings.Trim(strings.TrimSpace(value), `"'`)
-		if fen == "" || fen == "~" || fen == "null" {
-			continue
-		}
-		if _, err := chess.FEN(fen); err == nil {
-			s.Saves[slot-1] = &savedGame{Start: fen}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-	return store.Save(s.path, s)
 }

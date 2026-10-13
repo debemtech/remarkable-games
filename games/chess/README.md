@@ -14,7 +14,6 @@ finger on the destination. Close the app with *Exit* or AppLoad's swipe from the
 ## Files
 
 - `~/.config/chess/slots.json`: the save slots (starting position and moves).
-  chessMarkable's `~/.config/chessmarkable/savestates.yml` is imported on the first start.
 - `~/.config/chess/pgn/*.pgn`: games for the PGN viewer.
 
 ## Backend
