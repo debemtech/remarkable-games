@@ -1,0 +1,155 @@
+package hwr
+
+import (
+	_ "embed"
+	"encoding/binary"
+	"errors"
+	"math"
+	"sort"
+)
+
+//go:embed model.bin
+var modelData []byte
+
+type tensor struct {
+	values []float32
+}
+
+// Model is the letter classifier: conv 3x3 (16), pool, conv 3x3 (32), pool,
+// dense 128, dense 26.
+type Model struct {
+	c1w, c1b, c2w, c2b, f1w, f1b, f2w, f2b []float32
+}
+
+// Load reads the embedded model.
+func Load() (*Model, error) { return parse(modelData) }
+
+func parse(data []byte) (*Model, error) {
+	if len(data) < 4 || string(data[:4]) != "HWR1" {
+		return nil, errors.New("hwr: not a model file")
+	}
+	data = data[4:]
+	var ts [8][]float32
+	for i := range ts {
+		if len(data) < 8 {
+			return nil, errors.New("hwr: truncated model")
+		}
+		n := int(binary.LittleEndian.Uint32(data))
+		scale := math.Float32frombits(binary.LittleEndian.Uint32(data[4:]))
+		data = data[8:]
+		if len(data) < n {
+			return nil, errors.New("hwr: truncated model")
+		}
+		t := make([]float32, n)
+		for k := range t {
+			t[k] = float32(int8(data[k])) * scale
+		}
+		ts[i], data = t, data[n:]
+	}
+	m := &Model{ts[0], ts[1], ts[2], ts[3], ts[4], ts[5], ts[6], ts[7]}
+	if len(m.c1w) != 16*1*9 || len(m.c2w) != 32*16*9 || len(m.f1w) != 128*32*7*7 || len(m.f2w) != 26*128 {
+		return nil, errors.New("hwr: unexpected model shape")
+	}
+	return m, nil
+}
+
+// conv3x3 with padding 1, followed by ReLU. in is [cin][h][w].
+func conv3x3(in []float32, cin, h, w int, weight, bias []float32, cout int) []float32 {
+	out := make([]float32, cout*h*w)
+	for o := range cout {
+		for y := range h {
+			for x := range w {
+				sum := bias[o]
+				for c := range cin {
+					wo := (o*cin + c) * 9
+					for ky := -1; ky <= 1; ky++ {
+						yy := y + ky
+						if yy < 0 || yy >= h {
+							continue
+						}
+						for kx := -1; kx <= 1; kx++ {
+							xx := x + kx
+							if xx < 0 || xx >= w {
+								continue
+							}
+							sum += in[(c*h+yy)*w+xx] * weight[wo+(ky+1)*3+kx+1]
+						}
+					}
+				}
+				out[(o*h+y)*w+x] = max(sum, 0)
+			}
+		}
+	}
+	return out
+}
+
+func pool2(in []float32, c, h, w int) []float32 {
+	oh, ow := h/2, w/2
+	out := make([]float32, c*oh*ow)
+	for k := range c {
+		for y := range oh {
+			for x := range ow {
+				i := (k*h+2*y)*w + 2*x
+				out[(k*oh+y)*ow+x] = max(in[i], in[i+1], in[i+w], in[i+w+1])
+			}
+		}
+	}
+	return out
+}
+
+func dense(in, weight, bias []float32, relu bool) []float32 {
+	out := make([]float32, len(bias))
+	for o := range out {
+		sum := bias[o]
+		row := weight[o*len(in) : (o+1)*len(in)]
+		for i, v := range in {
+			sum += v * row[i]
+		}
+		if relu {
+			sum = max(sum, 0)
+		}
+		out[o] = sum
+	}
+	return out
+}
+
+// Logits returns the raw scores for A-Z.
+func (m *Model) Logits(img [Size * Size]float32) []float32 {
+	x := conv3x3(img[:], 1, 28, 28, m.c1w, m.c1b, 16)
+	x = pool2(x, 16, 28, 28)
+	x = conv3x3(x, 16, 14, 14, m.c2w, m.c2b, 32)
+	x = pool2(x, 32, 14, 14)
+	x = dense(x, m.f1w, m.f1b, true)
+	return dense(x, m.f2w, m.f2b, false)
+}
+
+// Guess is a letter with its probability.
+type Guess struct {
+	Letter      string  `json:"letter"`
+	Probability float32 `json:"p"`
+}
+
+// Recognize returns the most likely letters, best first.
+func (m *Model) Recognize(strokes []Stroke, n int) []Guess {
+	img, ok := Image(strokes)
+	if !ok {
+		return nil
+	}
+	logits := m.Logits(img)
+	peak := logits[0]
+	for _, v := range logits {
+		peak = max(peak, v)
+	}
+	var total float32
+	probs := make([]float32, len(logits))
+	for i, v := range logits {
+		probs[i] = float32(math.Exp(float64(v - peak)))
+		total += probs[i]
+	}
+	guesses := make([]Guess, len(probs))
+	for i := range probs {
+		guesses[i] = Guess{string(rune('A' + i)), probs[i] / total}
+	}
+	sort.Slice(guesses, func(i, j int) bool { return guesses[i].Probability > guesses[j].Probability })
+	return guesses[:min(n, len(guesses))]
+}

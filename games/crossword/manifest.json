@@ -1,0 +1,8 @@
+{
+    "name": "Crossword",
+    "loadsBackend": true,
+    "entry": "/ui/main.qml",
+    "id": "crossword",
+    "supportsScaling": false,
+    "canHaveMultipleFrontends": false
+}

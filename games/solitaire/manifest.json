@@ -1,0 +1,8 @@
+{
+    "name": "Solitaire",
+    "loadsBackend": true,
+    "entry": "/ui/main.qml",
+    "id": "solitaire",
+    "supportsScaling": false,
+    "canHaveMultipleFrontends": false
+}

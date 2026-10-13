@@ -1,0 +1,13 @@
+{
+  "version": "http://ipuz.org/v2",
+  "kind": ["http://ipuz.org/crossword#1"],
+  "title": "Pequena cruzada",
+  "author": "Teste",
+  "dimensions": {"width": 3, "height": 3},
+  "puzzle": [[1, 2, "#"], [3, 0, 4], ["#", 5, 0]],
+  "solution": [["S", "Ó", "#"], ["O", "L", "A"], ["#", "A", "Ç"]],
+  "clues": {
+    "Across": [[1, "Só"], [3, "Onda"], {"number": 5, "clue": "Ação sem o"}],
+    "Down": [[1, "Sol sem l"], [2, "Ola"], {"number": 4, "clue": "Ac"}]
+  }
+}

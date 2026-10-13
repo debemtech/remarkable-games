@@ -1,0 +1,70 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+    tags: ['*']
+  pull_request:
+
+env:
+  GAMES: chess sudoku mahjong blackjack solitaire crossword
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install Stockfish
+        run: sudo apt-get update && sudo apt-get install -y stockfish
+      - name: Test
+        run: |
+          test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+          go vet ./...
+          CHESS_STOCKFISH=/usr/games/stockfish go test -race ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        device: [rmpp, rm2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-base-dev-tools g++-aarch64-linux-gnu g++-arm-linux-gnueabihf
+      - uses: actions/cache@v4
+        with:
+          path: build/cache
+          key: stockfish-${{ matrix.device }}-${{ hashFiles('games/chess/stockfish.sh') }}
+      - name: Build
+        run: |
+          for game in $GAMES; do
+            ./build.sh "$game" ${{ matrix.device }}
+            tar -czf "build/$game-${{ matrix.device }}.tar.gz" -C build "$game-${{ matrix.device }}"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: games-${{ matrix.device }}
+          path: build/*.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: '*.tar.gz'
