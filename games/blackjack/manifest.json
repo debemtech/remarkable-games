@@ -1,5 +1,6 @@
 {
     "name": "Blackjack",
+    "folder": "Games",
     "loadsBackend": true,
     "entry": "/ui/main.qml",
     "id": "blackjack",

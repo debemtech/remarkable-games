@@ -1,5 +1,6 @@
 {
     "name": "Mahjong",
+    "folder": "Games",
     "loadsBackend": true,
     "entry": "/ui/main.qml",
     "id": "mahjong",
