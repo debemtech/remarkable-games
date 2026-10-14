@@ -1,7 +1,8 @@
 name: Vellum
 
 # After a release (vX.Y.Z tag), updates the Vellum package to it: the
-# VELBUILD in packaging/vellum gets the new version and checksums (committed
+# VELBUILD in packaging/vellum (built by Vellum from our source tarball and
+# Stockfish's) gets the new version and checksums (committed
 # here), and the change goes to vellum-dev/vellum as a pull request from the
 # maintainer's fork, opened with their token (secret VELLUM_TOKEN: a classic
 # personal access token with the public_repo scope).
@@ -11,7 +12,9 @@ on:
     types: [completed]
 
 env:
-  PACKAGE: appload-debem-games
+  PACKAGE: debem-games
+  # The fork's branch for the pull request (the first one was opened from it)
+  BRANCH: appload-debem-games
   FORK: debemdeboas/vellum
   AUTHOR_NAME: Rafael de Bem
   AUTHOR_EMAIL: debemrafael@gmail.com
@@ -79,7 +82,7 @@ jobs:
           gh repo sync "$FORK" --source vellum-dev/vellum --branch main
           git clone -q "https://x-access-token:$GH_TOKEN@github.com/$FORK.git" vellum
           cd vellum
-          git checkout -q -B "$PACKAGE" origin/main
+          git checkout -q -B "$BRANCH" origin/main
           if [ -d "packages/$PACKAGE" ]; then
             message="feat($PACKAGE): update to $VERSION"
           else
@@ -89,10 +92,10 @@ jobs:
           cp "../packaging/vellum/$PACKAGE/VELBUILD" "packages/$PACKAGE/VELBUILD"
           git add "packages/$PACKAGE"
           git -c user.name="$AUTHOR_NAME" -c user.email="$AUTHOR_EMAIL" commit -qm "$message"
-          git push -qf origin "$PACKAGE"
+          git push -qf origin "$BRANCH"
           # One pull request at a time: an open one gets the new commit
-          if [ -z "$(gh pr list --repo vellum-dev/vellum --head "$PACKAGE" --author "@me" --state open --json number --jq '.[].number')" ]; then
-            gh pr create --repo vellum-dev/vellum --base main --head "${FORK%%/*}:$PACKAGE" \
+          if [ -z "$(gh pr list --repo vellum-dev/vellum --head "$BRANCH" --author "@me" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --repo vellum-dev/vellum --base main --head "${FORK%%/*}:$BRANCH" \
               --title "$message" \
               --body "Updates $PACKAGE to $VERSION: https://github.com/${{ github.repository }}/releases/tag/$TAG"
           fi
