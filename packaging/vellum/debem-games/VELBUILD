@@ -1,4 +1,4 @@
-maintainer="Rafael de Bem <debemrafael@gmail.com>"
+maintainer="Rafael de Bem <rafael.bem@debem.dev>"
 pkgname=debem-games
 pkgver=0.1.2
 pkgrel=0
@@ -30,8 +30,7 @@ subpackages="
 	debem-crossword:_crossword
 "
 
-# Chess plays against Stockfish, built here from its release with the network
-# it was released with.
+# Chess plays against Stockfish.
 _stockfish=sf_19
 _net=nn-1a298aa575a0.nnue
 source="
@@ -70,7 +69,7 @@ package() {
 	_licenses "$pkgdir" "$pkgname"
 }
 
-# Installs one game into AppLoad, with the licenses
+# Installs one game into AppLoad
 _game() {
 	install -d "$subpkgdir"/home/root/xovi/exthome/appload
 	cp -r "$builddir/build/$1-rmpp" "$subpkgdir/home/root/xovi/exthome/appload/$1"
