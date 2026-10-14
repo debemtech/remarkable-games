@@ -1,0 +1,98 @@
+name: Vellum
+
+# After a release (vX.Y.Z tag), updates the Vellum package to it: the
+# VELBUILD in packaging/vellum gets the new version and checksums (committed
+# here), and the change goes to vellum-dev/vellum as a pull request from the
+# maintainer's fork, opened with their token (secret VELLUM_TOKEN: a classic
+# personal access token with the public_repo scope).
+on:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+
+env:
+  PACKAGE: appload-debem-games
+  FORK: debemdeboas/vellum
+  AUTHOR_NAME: Rafael de Bem
+  AUTHOR_EMAIL: debemrafael@gmail.com
+  VBUILD: https://github.com/Eeems/vbuild/releases/download/0.0.36/vbuild-x86_64-glibc
+
+jobs:
+  update:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Version
+        id: update
+        env:
+          TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          # Only release tags like v1.2.3 (a branch can start with v too)
+          if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+            echo "version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.update.outputs.version
+        with:
+          ref: main
+
+      - name: Update the VELBUILD
+        if: steps.update.outputs.version
+        env:
+          VERSION: ${{ steps.update.outputs.version }}
+        run: |
+          version=$VERSION
+          sudo curl -sSfL "$VBUILD" -o /usr/local/bin/vbuild
+          sudo chmod +x /usr/local/bin/vbuild
+          dir=packaging/vellum/$PACKAGE
+          sed -i "s/^pkgver=.*/pkgver=$version/; s/^pkgrel=.*/pkgrel=0/" "$dir/VELBUILD"
+          # Like Vellum's scripts/update-checksums.sh
+          work=$(mktemp -d)
+          cp -r "$dir/." "$work"
+          vbuild -C "$work" checksum
+          cp "$work/VELBUILD" "$dir/VELBUILD"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet; then
+            git commit -qam "Vellum: $version"
+            git push origin HEAD:main
+          fi
+
+      - name: Open or update the pull request
+        if: steps.update.outputs.version
+        env:
+          GH_TOKEN: ${{ secrets.VELLUM_TOKEN }}
+          VERSION: ${{ steps.update.outputs.version }}
+          TAG: ${{ steps.update.outputs.tag }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::No VELLUM_TOKEN secret, so no pull request to Vellum"
+            exit 0
+          fi
+          gh repo sync "$FORK" --source vellum-dev/vellum --branch main
+          git clone -q "https://x-access-token:$GH_TOKEN@github.com/$FORK.git" vellum
+          cd vellum
+          git checkout -q -B "$PACKAGE" origin/main
+          if [ -d "packages/$PACKAGE" ]; then
+            message="feat($PACKAGE): update to $VERSION"
+          else
+            message="feat($PACKAGE): add $PACKAGE to vellum"
+          fi
+          mkdir -p "packages/$PACKAGE"
+          cp "../packaging/vellum/$PACKAGE/VELBUILD" "packages/$PACKAGE/VELBUILD"
+          git add "packages/$PACKAGE"
+          git -c user.name="$AUTHOR_NAME" -c user.email="$AUTHOR_EMAIL" commit -qm "$message"
+          git push -qf origin "$PACKAGE"
+          # One pull request at a time: an open one gets the new commit
+          if [ -z "$(gh pr list --repo vellum-dev/vellum --head "$PACKAGE" --author "@me" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --repo vellum-dev/vellum --base main --head "${FORK%%/*}:$PACKAGE" \
+              --title "$message" \
+              --body "Updates $PACKAGE to $VERSION: https://github.com/${{ github.repository }}/releases/tag/$TAG"
+          fi
