@@ -17,7 +17,7 @@ env:
   BRANCH: appload-debem-games
   FORK: debemdeboas/vellum
   AUTHOR_NAME: Rafael de Bem
-  AUTHOR_EMAIL: debemrafael@gmail.com
+  AUTHOR_EMAIL: rafael.bem@debem.dev
   VBUILD: https://github.com/Eeems/vbuild/releases/download/0.0.36/vbuild-x86_64-glibc
 
 jobs:
