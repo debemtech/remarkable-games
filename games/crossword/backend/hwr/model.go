@@ -57,30 +57,41 @@ func parse(data []byte) (*Model, error) {
 }
 
 // conv3x3 with padding 1, followed by ReLU. in is [cin][h][w].
+//
+// Every output plane starts at the bias and gets each input plane added in,
+// shifted for each of the 9 kernel taps, over the part where the shifted plane
+// lies inside the image (so there are no edge checks per multiply). Each
+// output pixel adds up the same terms in the same order as a straight sum
+// over channels and taps would.
 func conv3x3(in []float32, cin, h, w int, weight, bias []float32, cout int) []float32 {
-	out := make([]float32, cout*h*w)
+	plane := h * w
+	out := make([]float32, cout*plane)
 	for o := range cout {
-		for y := range h {
-			for x := range w {
-				sum := bias[o]
-				for c := range cin {
-					wo := (o*cin + c) * 9
-					for ky := -1; ky <= 1; ky++ {
-						yy := y + ky
-						if yy < 0 || yy >= h {
-							continue
-						}
-						for kx := -1; kx <= 1; kx++ {
-							xx := x + kx
-							if xx < 0 || xx >= w {
-								continue
-							}
-							sum += in[(c*h+yy)*w+xx] * weight[wo+(ky+1)*3+kx+1]
+		acc := out[o*plane : (o+1)*plane]
+		for i := range acc {
+			acc[i] = bias[o]
+		}
+		for c := range cin {
+			src := in[c*plane : (c+1)*plane]
+			kernel := weight[(o*cin+c)*9 : (o*cin+c+1)*9]
+			for ky := -1; ky <= 1; ky++ {
+				y0, y1 := max(0, -ky), min(h, h-ky)
+				for kx := -1; kx <= 1; kx++ {
+					k := kernel[(ky+1)*3+kx+1]
+					x0, x1 := max(0, -kx), min(w, w-kx)
+					for y := y0; y < y1; y++ {
+						dst := acc[y*w+x0 : y*w+x1]
+						from := src[(y+ky)*w+x0+kx:]
+						from = from[:len(dst)]
+						for i, v := range from {
+							dst[i] += k * v
 						}
 					}
 				}
-				out[(o*h+y)*w+x] = max(sum, 0)
 			}
+		}
+		for i, v := range acc {
+			acc[i] = max(v, 0)
 		}
 	}
 	return out
@@ -100,13 +111,21 @@ func pool2(in []float32, c, h, w int) []float32 {
 	return out
 }
 
+// dense is a fully connected layer. Inputs that are zero (most of them, after
+// ReLU) are skipped: they would only add zeros.
 func dense(in, weight, bias []float32, relu bool) []float32 {
+	idx := make([]int, 0, len(in))
+	for i, v := range in {
+		if v != 0 {
+			idx = append(idx, i)
+		}
+	}
 	out := make([]float32, len(bias))
 	for o := range out {
 		sum := bias[o]
 		row := weight[o*len(in) : (o+1)*len(in)]
-		for i, v := range in {
-			sum += v * row[i]
+		for _, i := range idx {
+			sum += in[i] * row[i]
 		}
 		if relu {
 			sum = max(sum, 0)

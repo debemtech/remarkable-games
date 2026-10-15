@@ -78,3 +78,15 @@ func TestRecognizeStrokes(t *testing.T) {
 		t.Fatal("no guess for a tiny stroke")
 	}
 }
+
+func BenchmarkLogits(b *testing.B) {
+	m, err := hwr.Load()
+	if err != nil {
+		b.Fatal(err)
+	}
+	img, _ := hwr.Image(letters.Variant(rand.New(rand.NewPCG(1, 1)), 'A'))
+	b.ResetTimer()
+	for range b.N {
+		m.Logits(img)
+	}
+}
