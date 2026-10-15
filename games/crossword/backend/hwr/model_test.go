@@ -90,3 +90,17 @@ func BenchmarkLogits(b *testing.B) {
 		m.Logits(img)
 	}
 }
+
+func BenchmarkImage(b *testing.B) {
+	strokes := letters.Variant(rand.New(rand.NewPCG(1, 1)), 'A')
+	for range b.N {
+		hwr.Image(strokes)
+	}
+}
+
+func BenchmarkVariant(b *testing.B) {
+	rng := rand.New(rand.NewPCG(1, 1))
+	for range b.N {
+		letters.Variant(rng, 'A')
+	}
+}

@@ -19,7 +19,8 @@ type tensor struct {
 // dense 26. How wide the layers are comes from the file.
 type Model struct {
 	c1w, c1b, c2w, c2b, f1w, f1b, f2w, f2b []float32
-	conv1, conv2, hidden                   int // channels and units
+	conv1, conv2, hidden                   int       // channels and units
+	f1t, f2t                               []float32 // f1w and f2w transposed, for dense
 }
 
 // Load reads the embedded model.
@@ -53,42 +54,54 @@ func parse(data []byte) (*Model, error) {
 		len(m.f1w) != m.hidden*m.conv2*7*7 || len(m.f2b) != 26 || len(m.f2w) != 26*m.hidden {
 		return nil, errors.New("hwr: unexpected model shape")
 	}
+	m.f1t = transpose(m.f1w, m.hidden, m.conv2*7*7)
+	m.f2t = transpose(m.f2w, 26, m.hidden)
 	return m, nil
+}
+
+// transpose turns a [rows][cols] matrix into [cols][rows].
+func transpose(m []float32, rows, cols int) []float32 {
+	t := make([]float32, len(m))
+	for r := range rows {
+		for c := range cols {
+			t[c*rows+r] = m[r*cols+c]
+		}
+	}
+	return t
 }
 
 // conv3x3 with padding 1, followed by ReLU. in is [cin][h][w].
 //
-// Every output plane starts at the bias and gets each input plane added in,
-// shifted for each of the 9 kernel taps, over the part where the shifted plane
-// lies inside the image (so there are no edge checks per multiply). Each
-// output pixel adds up the same terms in the same order as a straight sum
-// over channels and taps would.
+// Each input plane is first copied once per kernel tap, shifted by the tap
+// and with zeros where it would read outside the image. Then every output
+// plane is its bias plus each shifted plane times its weight (axpy), over
+// whole planes. Each output pixel adds up its terms in the same order as a
+// straight sum over channels and taps; the zeros add nothing.
 func conv3x3(in []float32, cin, h, w int, weight, bias []float32, cout int) []float32 {
 	plane := h * w
+	shifted := make([]float32, cin*9*plane)
+	for c := range cin {
+		src := in[c*plane : (c+1)*plane]
+		for ky := -1; ky <= 1; ky++ {
+			y0, y1 := max(0, -ky), min(h, h-ky)
+			for kx := -1; kx <= 1; kx++ {
+				tap := (ky+1)*3 + kx + 1
+				dst := shifted[(c*9+tap)*plane : (c*9+tap+1)*plane]
+				x0, x1 := max(0, -kx), min(w, w-kx)
+				for y := y0; y < y1; y++ {
+					copy(dst[y*w+x0:y*w+x1], src[(y+ky)*w+x0+kx:])
+				}
+			}
+		}
+	}
 	out := make([]float32, cout*plane)
 	for o := range cout {
 		acc := out[o*plane : (o+1)*plane]
 		for i := range acc {
 			acc[i] = bias[o]
 		}
-		for c := range cin {
-			src := in[c*plane : (c+1)*plane]
-			kernel := weight[(o*cin+c)*9 : (o*cin+c+1)*9]
-			for ky := -1; ky <= 1; ky++ {
-				y0, y1 := max(0, -ky), min(h, h-ky)
-				for kx := -1; kx <= 1; kx++ {
-					k := kernel[(ky+1)*3+kx+1]
-					x0, x1 := max(0, -kx), min(w, w-kx)
-					for y := y0; y < y1; y++ {
-						dst := acc[y*w+x0 : y*w+x1]
-						from := src[(y+ky)*w+x0+kx:]
-						from = from[:len(dst)]
-						for i, v := range from {
-							dst[i] += k * v
-						}
-					}
-				}
-			}
+		for k := range cin * 9 {
+			axpy(acc, shifted[k*plane:(k+1)*plane], weight[o*cin*9+k])
 		}
 		for i, v := range acc {
 			acc[i] = max(v, 0)
@@ -111,26 +124,22 @@ func pool2(in []float32, c, h, w int) []float32 {
 	return out
 }
 
-// dense is a fully connected layer. Inputs that are zero (most of them, after
-// ReLU) are skipped: they would only add zeros.
-func dense(in, weight, bias []float32, relu bool) []float32 {
-	idx := make([]int, 0, len(in))
+// dense is a fully connected layer, with the weights transposed ([in][out]):
+// the outputs start at the bias and get each input's row of weights times the
+// input (axpy). Inputs that are zero (most of them, after ReLU) are skipped:
+// they would only add zeros.
+func dense(in, weightT, bias []float32, relu bool) []float32 {
+	out := append([]float32(nil), bias...)
+	n := len(out)
 	for i, v := range in {
 		if v != 0 {
-			idx = append(idx, i)
+			axpy(out, weightT[i*n:(i+1)*n], v)
 		}
 	}
-	out := make([]float32, len(bias))
-	for o := range out {
-		sum := bias[o]
-		row := weight[o*len(in) : (o+1)*len(in)]
-		for _, i := range idx {
-			sum += in[i] * row[i]
+	if relu {
+		for i, v := range out {
+			out[i] = max(v, 0)
 		}
-		if relu {
-			sum = max(sum, 0)
-		}
-		out[o] = sum
 	}
 	return out
 }
@@ -141,8 +150,8 @@ func (m *Model) Logits(img [Size * Size]float32) []float32 {
 	x = pool2(x, m.conv1, 28, 28)
 	x = conv3x3(x, m.conv1, 14, 14, m.c2w, m.c2b, m.conv2)
 	x = pool2(x, m.conv2, 14, 14)
-	x = dense(x, m.f1w, m.f1b, true)
-	return dense(x, m.f2w, m.f2b, false)
+	x = dense(x, m.f1t, m.f1b, true)
+	return dense(x, m.f2t, m.f2b, false)
 }
 
 // Guess is a letter with its probability.

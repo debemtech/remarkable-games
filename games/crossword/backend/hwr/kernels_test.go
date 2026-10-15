@@ -72,6 +72,22 @@ func same(t *testing.T, what string, got, want []float32) {
 	}
 }
 
+// axpy (in assembly on arm64) is dst[i] += k*src[i], also on lengths that
+// don't fill its blocks of 16 and 4.
+func TestAxpy(t *testing.T) {
+	rng := rand.New(rand.NewPCG(3, 4))
+	for n := range 70 {
+		dst, src := random(rng, n, 0.2), random(rng, n+3, 0.2)
+		k := float32(rng.NormFloat64())
+		want := append([]float32(nil), dst...)
+		for i := range want {
+			want[i] += k * src[i]
+		}
+		axpy(dst, src, k)
+		same(t, "axpy", dst, want)
+	}
+}
+
 // The fast kernels give exactly the same numbers, bit for bit.
 func TestKernelsExact(t *testing.T) {
 	rng := rand.New(rand.NewPCG(1, 2))
@@ -82,8 +98,9 @@ func TestKernelsExact(t *testing.T) {
 	}
 	for _, zeros := range []float64{0, 0.7, 1} {
 		in, weight, bias := random(rng, 300, zeros), random(rng, 300*17, 0), random(rng, 17, 0)
-		same(t, "dense", dense(in, weight, bias, true), densePlain(in, weight, bias, true))
-		same(t, "dense", dense(in, weight, bias, false), densePlain(in, weight, bias, false))
+		weightT := transpose(weight, 17, 300)
+		same(t, "dense", dense(in, weightT, bias, true), densePlain(in, weight, bias, true))
+		same(t, "dense", dense(in, weightT, bias, false), densePlain(in, weight, bias, false))
 	}
 	// And the whole model, on real letters
 	m, err := Load()
