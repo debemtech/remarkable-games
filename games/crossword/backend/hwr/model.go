@@ -15,10 +15,11 @@ type tensor struct {
 	values []float32
 }
 
-// Model is the letter classifier: conv 3x3 (16), pool, conv 3x3 (32), pool,
-// dense 128, dense 26.
+// Model is the letter classifier: conv 3x3, pool, conv 3x3, pool, dense,
+// dense 26. How wide the layers are comes from the file.
 type Model struct {
 	c1w, c1b, c2w, c2b, f1w, f1b, f2w, f2b []float32
+	conv1, conv2, hidden                   int // channels and units
 }
 
 // Load reads the embedded model.
@@ -46,8 +47,10 @@ func parse(data []byte) (*Model, error) {
 		}
 		ts[i], data = t, data[n:]
 	}
-	m := &Model{ts[0], ts[1], ts[2], ts[3], ts[4], ts[5], ts[6], ts[7]}
-	if len(m.c1w) != 16*1*9 || len(m.c2w) != 32*16*9 || len(m.f1w) != 128*32*7*7 || len(m.f2w) != 26*128 {
+	m := &Model{c1w: ts[0], c1b: ts[1], c2w: ts[2], c2b: ts[3], f1w: ts[4], f1b: ts[5], f2w: ts[6], f2b: ts[7]}
+	m.conv1, m.conv2, m.hidden = len(m.c1b), len(m.c2b), len(m.f1b)
+	if m.conv1 == 0 || len(m.c1w) != m.conv1*9 || len(m.c2w) != m.conv2*m.conv1*9 ||
+		len(m.f1w) != m.hidden*m.conv2*7*7 || len(m.f2b) != 26 || len(m.f2w) != 26*m.hidden {
 		return nil, errors.New("hwr: unexpected model shape")
 	}
 	return m, nil
@@ -115,10 +118,10 @@ func dense(in, weight, bias []float32, relu bool) []float32 {
 
 // Logits returns the raw scores for A-Z.
 func (m *Model) Logits(img [Size * Size]float32) []float32 {
-	x := conv3x3(img[:], 1, 28, 28, m.c1w, m.c1b, 16)
-	x = pool2(x, 16, 28, 28)
-	x = conv3x3(x, 16, 14, 14, m.c2w, m.c2b, 32)
-	x = pool2(x, 32, 14, 14)
+	x := conv3x3(img[:], 1, 28, 28, m.c1w, m.c1b, m.conv1)
+	x = pool2(x, m.conv1, 28, 28)
+	x = conv3x3(x, m.conv1, 14, 14, m.c2w, m.c2b, m.conv2)
+	x = pool2(x, m.conv2, 14, 14)
 	x = dense(x, m.f1w, m.f1b, true)
 	return dense(x, m.f2w, m.f2b, false)
 }

@@ -40,7 +40,9 @@ func p(coords ...float64) []pt {
 // Strokes of each letter in a 10x10 box, y pointing down. Some letters have
 // several common ways of writing them.
 var Shapes = map[byte][][]hwr.Stroke{
-	'A': {{path(p(0, 10, 5, 0, 10, 10)), path(p(2.2, 6, 7.8, 6))}},
+	'A': {{path(p(0, 10, 5, 0, 10, 10)), path(p(2.2, 6, 7.8, 6))},
+		{path(p(5, 0, 0, 10)), path(p(5, 0, 10, 10)), path(p(2.2, 6, 7.8, 6))},
+		{path(p(0, 10), arc(5, 3, 3.5, 3, 180, 360), p(10, 10)), path(p(1.5, 6.5, 8.5, 6.5))}},
 	'B': {{path(p(1, 10, 1, 0, 6, 0), arc(6, 2.5, 2.7, 2.5, -90, 90), p(1, 5)), path(p(6, 5), arc(6, 7.5, 3, 2.5, -90, 90), p(1, 10))},
 		{path(p(1, 0, 1, 10)), path(p(1, 0, 6, 0), arc(6, 2.5, 2.7, 2.5, -90, 90), p(1, 5, 6, 5), arc(6, 7.5, 3, 2.5, -90, 90), p(1, 10))}},
 	'C': {{path(arc(5.5, 5, 4.5, 5, -40, -320))}},
@@ -52,14 +54,14 @@ var Shapes = map[byte][][]hwr.Stroke{
 	'G': {{path(arc(5.5, 5, 4.5, 5, -40, -330), p(9.5, 5.5, 6, 5.5))},
 		{path(arc(5.5, 5, 4.5, 5, -40, -340), p(9.8, 8, 9.8, 5.5, 6.5, 5.5))}},
 	'H': {{path(p(1, 0, 1, 10)), path(p(9, 0, 9, 10)), path(p(1, 5, 9, 5))}},
-	'I': {{path(p(5, 0, 5, 10)), path(p(3, 0, 7, 0)), path(p(3, 10, 7, 10))}, {path(p(5, 0, 5, 10))}},
+	'I': {{path(p(5, 0, 5, 10)), path(p(3, 0, 7, 0)), path(p(3, 10, 7, 10))}, {path(p(5, 0, 5, 10))}, {path(p(5, 0, 5, 10))}},
 	'J': {{path(p(8, 0, 8, 7), arc(5, 7, 3, 3, 0, 180))}, {path(p(4, 0, 10, 0)), path(p(8, 0, 8, 7), arc(5, 7, 3, 3, 0, 160))}},
 	'K': {{path(p(1, 0, 1, 10)), path(p(9, 0, 1, 6)), path(p(3.5, 4.5, 9, 10))},
 		{path(p(1, 0, 1, 10)), path(p(9, 0, 1.5, 5, 9, 10))}},
 	'L': {{path(p(1, 0, 1, 10, 8, 10))}},
 	'M': {{path(p(1, 10, 1, 0, 5, 6, 9, 0, 9, 10))}, {path(p(0, 10, 1.5, 0, 5, 8, 8.5, 0, 10, 10))}},
 	'N': {{path(p(1, 10, 1, 0, 9, 10, 9, 0))}},
-	'O': {{path(arc(5, 5, 4.5, 5, -90, 270))}},
+	'O': {{path(arc(5, 5, 4.5, 5, -90, 270))}, {path(arc(5, 5, 4.5, 5, -90, 270))}},
 	'P': {{path(p(1, 10, 1, 0, 6, 0), arc(6, 2.7, 3, 2.7, -90, 90), p(1, 5.4))},
 		{path(p(1, 0, 1, 10)), path(p(1, 0, 6, 0), arc(6, 2.7, 3, 2.7, -90, 90), p(1, 5.4))}},
 	'Q': {{path(arc(5, 5, 4.5, 5, -90, 270)), path(p(6, 7, 10, 10.5))}},
@@ -75,13 +77,46 @@ var Shapes = map[byte][][]hwr.Stroke{
 	'Z': {{path(p(0, 0, 10, 0, 0, 10, 10, 10))}, {path(p(0, 0, 10, 0, 0, 10, 10, 10)), path(p(2.5, 5, 7.5, 5))}},
 }
 
-// Variant draws a letter the way a person might: shaken, slanted, squashed.
+// A letter drawn quickly: O and Q often stay open near the top, where the pen
+// started (open elsewhere they'd be a C or a U); the bar of an A goes anywhere
+// from high to low.
+func sloppy(rng *rand.Rand, letter byte, form []hwr.Stroke) []hwr.Stroke {
+	switch letter {
+	case 'O', 'Q':
+		start := -90 + (rng.Float64()*2-1)*35
+		gap := 0.0
+		if rng.IntN(3) > 0 {
+			gap = rng.Float64() * 35
+		}
+		dir := 1.0
+		if rng.IntN(2) == 0 {
+			dir = -1
+		}
+		ring := path(arc(5, 5, 4.5, 5, start, start+dir*(360-gap)))
+		if letter == 'Q' {
+			return []hwr.Stroke{ring, form[1]}
+		}
+		return []hwr.Stroke{ring}
+	case 'A':
+		y := 4 + rng.Float64()*4.2
+		half := y / 10 * 5 // the legs are 5 apart per 10 down
+		out := append([]hwr.Stroke(nil), form[:len(form)-1]...)
+		return append(out, path(p(5-half+0.3, y, 5+half-0.3, y)))
+	}
+	return form
+}
+
+// Variant draws a letter the way a person might: shaken, slanted, squashed,
+// with strokes that stop short or don't quite meet.
 func Variant(rng *rand.Rand, letter byte) []hwr.Stroke {
 	forms := Shapes[letter]
-	form := forms[rng.IntN(len(forms))]
+	form := sloppy(rng, letter, forms[rng.IntN(len(forms))])
 
 	angle := (rng.Float64()*2 - 1) * 12 * math.Pi / 180
 	shear := (rng.Float64()*2 - 1) * 0.3
+	if letter == 'I' {
+		shear /= 2 // a stick leans by the shear alone
+	}
 	sx := 0.65 + rng.Float64()*0.55
 	sy := 0.75 + rng.Float64()*0.45
 	cos, sin := math.Cos(angle), math.Sin(angle)
@@ -108,9 +143,19 @@ func Variant(rng *rand.Rand, letter byte) []hwr.Stroke {
 			x, y := (q.X-5)*sx+shear*(q.Y-5), (q.Y-5)*sy
 			ns[i] = pt{X: x*cos - y*sin, Y: x*sin + y*cos}
 		}
-		// Sometimes a stroke stops a little short
+		// Sometimes a stroke stops short at either end, or lands a bit off
+		if len(ns) > 10 && rng.IntN(4) == 0 {
+			ns = ns[:len(ns)-rng.IntN(len(ns)/8+1)]
+		}
 		if len(ns) > 10 && rng.IntN(6) == 0 {
-			ns = ns[:len(ns)-rng.IntN(len(ns)/12+1)]
+			ns = ns[rng.IntN(len(ns)/10+1):]
+		}
+		if len(form) > 1 && rng.IntN(4) == 0 {
+			dx, dy := rng.NormFloat64()*0.35, rng.NormFloat64()*0.35
+			for i := range ns {
+				ns[i].X += dx
+				ns[i].Y += dy
+			}
 		}
 		out = append(out, ns)
 	}

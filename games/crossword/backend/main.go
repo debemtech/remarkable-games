@@ -36,6 +36,7 @@ type crosswordApp struct {
 	guesses  *guessView
 	fetching bool
 	history  []step // for undo, while the puzzle is open
+	samples  *sampleLog
 }
 
 // step is what one action changed, to undo it.
@@ -95,7 +96,7 @@ func newCrosswordApp(app *appload.App, dir string, client *sources.Client) (*cro
 	if err != nil {
 		return nil, err
 	}
-	c := &crosswordApp{app: app, lib: openLibrary(dir), model: model, client: client}
+	c := &crosswordApp{app: app, lib: openLibrary(dir), model: model, client: client, samples: openSamples(dir)}
 	app.UsePrefs(filepath.Join(dir, "prefs.json"))
 	pen.Serve(app)
 	app.OnSync(c.sync)
@@ -229,6 +230,7 @@ func (c *crosswordApp) open(key string) error {
 	}
 	c.pause()
 	c.key, c.puz, c.wrong, c.guesses, c.history = key, p, nil, nil, nil
+	c.samples.reset()
 	c.pr = c.lib.open(key, p)
 	if !c.pr.Solved {
 		c.pr.Resume()
@@ -293,8 +295,15 @@ func (c *crosswordApp) strokes(r strokesRequest) error {
 			}
 		}
 		guesses := c.model.Recognize(strokes, 4)
-		if len(guesses) == 0 {
+		if len(guesses) == 0 || !c.cellOK(r.Cell) {
 			return nil
+		}
+		truth := ""
+		if c.puz.HasSolution {
+			truth = puzzle.Letter(c.puz.Cells[r.Cell].Solution)
+		}
+		if _, err := c.samples.written(c.key, r.Cell, r.Strokes, guesses, truth, time.Now()); err != nil {
+			c.app.Log.Warn("saving a handwriting sample", "err", err)
 		}
 		c.guesses = &guessView{Cell: r.Cell, Letters: guesses}
 		return c.set(r.Cell, guesses[0].Letter, true, false)

@@ -62,18 +62,30 @@ Your own puzzles: copy `.puz` (Across Lite) or `.ipuz` files to
 
 ## Handwriting recognition
 
-`backend/hwr` turns the pen strokes of one box into a 28×28 image the way the
+`backend/hwr` turns the pen strokes of one square into a 28×28 image the way the
 [EMNIST](https://www.nist.gov/itl/products-and-services/emnist-dataset) letters were
 made, then runs a small convolutional network (two convolutions, two dense layers,
-210 KB of int8 weights in `model.bin`). It takes about 3 ms per letter on a PC. It scores
-94% on EMNIST's own test set, which is handwriting scanned from paper; pen strokes drawn the
-way the app draws them are recognized almost always.
+830 KB of int8 weights in `model.bin`; the layer sizes are read from the file). It is
+trained on EMNIST's letters, the capitals of its byclass split (what people write in a
+crossword) and synthetic pen letters (`hwrtrain/letters`), which include the quick
+forms: open O's, plain I's, A's with the bar anywhere or missing. It scores 98% on
+EMNIST's capitals, and takes about 10 ms per letter on a PC.
 
-To retrain (needs PyTorch, the EMNIST letters split and a GPU for speed):
+Real handwriting it gets wrong is kept: when a letter is read as something other than
+the square's answer and then written again in the same square and read right, both
+writings go to `~/.config/crossword/samples.jsonl` (at most 2000). Train on them with:
 
 ```sh
-go run ./games/crossword/hwrtrain/synth -n 78000 -o build/hwr/synth.bin   # synthetic pen letters
-python3 games/crossword/hwrtrain/train.py --emnist path/to/emnist --synth build/hwr/synth.bin
+scp remarkable:.config/crossword/samples.jsonl build/hwr/
+go run ./games/crossword/hwrtrain/samples -o build/hwr/real.bin build/hwr/samples.jsonl
+```
+
+To retrain (needs PyTorch, the EMNIST letters and byclass splits and a GPU for speed):
+
+```sh
+go run ./games/crossword/hwrtrain/synth -n 104000 -o build/hwr/synth.bin   # synthetic pen letters
+python3 games/crossword/hwrtrain/train.py --emnist path/to/emnist --synth build/hwr/synth.bin \
+    --size l [--real build/hwr/real.bin]
 ```
 
 That writes `model.bin` and `testdata/reference.bin`; `go test ./games/crossword/backend/hwr`
@@ -88,5 +100,5 @@ checks that the Go inference matches PyTorch.
 | `backend/hwr/` | the letter recognizer |
 | `backend/library.go` | puzzles on the tablet and their progress |
 | `backend/main.go` | wiring |
-| `hwrtrain/` | training: synthetic letters (Go) and the network (PyTorch) |
+| `hwrtrain/` | training: synthetic letters and logged samples (Go), the network (PyTorch) |
 | `ui/GameScreen.qml` | grid with pen input, clues |

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"appload-games/framework/appload"
@@ -169,5 +171,54 @@ func TestDownloadsAndLanguage(t *testing.T) {
 	src := apptest.Expect[sourcesView](host, msgSrcList, nil)
 	if len(src.Sources) < 5 || src.Sources[0].Language != "pt" {
 		t.Fatalf("bad sources %+v", src)
+	}
+}
+
+// A letter misread and then written again in the same square, read right this
+// time, is kept as a sample for training.
+func TestSamples(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "puzzles"), 0o755)
+	data, _ := os.ReadFile("puzzle/testdata/mini.puz")
+	os.WriteFile(filepath.Join(dir, "puzzles", "mini.puz"), data, 0o644)
+	_, host := start(t, dir)
+	host.Send(msgOpen, keyRequest{Key: "puzzles/mini.puz"})
+	apptest.Expect(host, msgPuzzle, func(p puzzleView) bool { return p.Active })
+
+	rng := rand.New(rand.NewPCG(5, 5))
+	write := func(cell int, letter byte) string {
+		var strokes [][]float64
+		for _, s := range letters.Variant(rng, letter) {
+			var flat []float64
+			for _, p := range s {
+				flat = append(flat, p.X*20, p.Y*20)
+			}
+			strokes = append(strokes, flat)
+		}
+		host.Send(msgStrokes, strokesRequest{Cell: cell, Strokes: strokes})
+		pr := apptest.Expect(host, msgProgress, func(p progressView) bool { return p.Guesses != nil && p.Guesses.Cell == cell })
+		return pr.Entries[cell]
+	}
+	// Square 0 is the C of CARD.
+	if got := write(0, 'X'); got != "X" {
+		t.Fatalf("read %q", got)
+	}
+	write(0, 'C')
+	write(1, 'A') // right the first time: nothing to learn
+	write(2, 'X')
+	write(3, 'D') // another square: not a fix of the X
+
+	lines, _ := os.ReadFile(filepath.Join(dir, "samples.jsonl"))
+	var got []sample
+	for _, line := range strings.Split(strings.TrimSpace(string(lines)), "\n") {
+		var s sample
+		if err := json.Unmarshal([]byte(line), &s); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, s)
+	}
+	if len(got) != 1 || got[0].Letter != "C" || got[0].Cell != 0 || got[0].Misread.Guesses[0].Letter != "X" ||
+		got[0].Fixed.Guesses[0].Letter != "C" || len(got[0].Misread.Strokes) != 2 {
+		t.Fatalf("samples: %+v", got)
 	}
 }

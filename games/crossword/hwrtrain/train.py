@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Trains the letter recognizer and writes games/crossword/backend/hwr/model.bin.
 
-Needs PyTorch and numpy, the EMNIST letters split (gzip IDX files) and the
-synthetic pen letters from ./synth:
+Needs PyTorch and numpy, the EMNIST letters and byclass splits (gzip IDX
+files) and the synthetic pen letters from ./synth:
 
-    go run ./games/crossword/hwrtrain/synth -n 78000 -o build/hwr/synth.bin
+    go run ./games/crossword/hwrtrain/synth -n 104000 -o build/hwr/synth.bin
     python3 games/crossword/hwrtrain/train.py --emnist path/to/emnist --synth build/hwr/synth.bin
 
-The model is small on purpose: two convolutions and two dense layers, about
-210k weights, stored as int8 (about 210 KB).
+Real handwriting from the tablet (see ./samples) can be added with --real.
+
+The model is two convolutions and two dense layers, stored as int8; --size
+picks how wide they are (the Go side reads the sizes from the file).
 """
 import argparse
 import gzip
@@ -40,18 +42,31 @@ def emnist(folder, split):
     return imgs.transpose(0, 2, 1).copy(), labels.astype(np.int64) - 1
 
 
+def emnist_capitals(folder, split):
+    """The capital letters of the byclass split (labels 10-35), which is what
+    people write in a crossword. The letters split mixes in lowercase."""
+    imgs = load_idx(os.path.join(folder, f"emnist-byclass-{split}-images-idx3-ubyte.gz"))
+    labels = load_idx(os.path.join(folder, f"emnist-byclass-{split}-labels-idx1-ubyte.gz"))
+    keep = (labels >= 10) & (labels < 36)
+    return imgs[keep].transpose(0, 2, 1).copy(), labels[keep].astype(np.int64) - 10
+
+
 def synth(path):
     d = np.fromfile(path, np.uint8).reshape(-1, 785)
     return d[:, :784].reshape(-1, 28, 28).copy(), d[:, 784].astype(np.int64)
 
 
+SIZES = {"s": (16, 32, 128), "m": (32, 64, 128), "l": (32, 64, 256)}
+
+
 class Net(nn.Module):
-    def __init__(self):
+    def __init__(self, size="m"):
         super().__init__()
-        self.c1 = nn.Conv2d(1, 16, 3, padding=1)
-        self.c2 = nn.Conv2d(16, 32, 3, padding=1)
-        self.f1 = nn.Linear(32 * 7 * 7, 128)
-        self.f2 = nn.Linear(128, 26)
+        a, b, c = SIZES[size]
+        self.c1 = nn.Conv2d(1, a, 3, padding=1)
+        self.c2 = nn.Conv2d(a, b, 3, padding=1)
+        self.f1 = nn.Linear(b * 7 * 7, c)
+        self.f2 = nn.Linear(c, 26)
 
     def forward(self, x):
         x = F.max_pool2d(F.relu(self.c1(x)), 2)
@@ -108,6 +123,9 @@ def main():
     ap.add_argument("--emnist", required=True)
     ap.add_argument("--synth", required=True)
     ap.add_argument("--epochs", type=int, default=12)
+    ap.add_argument("--size", choices=SIZES, default="m")
+    ap.add_argument("--real", help="letters written on the tablet (from ./samples)")
+    ap.add_argument("--real-weight", type=int, default=20, help="how many times each real letter counts")
     ap.add_argument("--out", default=OUT)
     args = ap.parse_args()
     torch.manual_seed(1)
@@ -115,13 +133,20 @@ def main():
 
     ex, ey = emnist(args.emnist, "train")
     tx, ty = emnist(args.emnist, "test")
+    cx, cy = emnist_capitals(args.emnist, "train")
+    ctx, cty = emnist_capitals(args.emnist, "test")
     sx, sy = synth(args.synth)
     split = len(sx) * 9 // 10
-    x = np.concatenate([ex, sx[:split]])
-    y = np.concatenate([ey, sy[:split]])
-    print(f"training on {len(x)} letters ({len(ex)} EMNIST, {split} synthetic) on {device}")
+    rx = np.zeros((0, 28, 28), np.uint8)
+    ry = np.zeros(0, np.int64)
+    if args.real:
+        rx, ry = synth(args.real)
+    x = np.concatenate([ex, cx, sx[:split]] + [rx] * args.real_weight)
+    y = np.concatenate([ey, cy, sy[:split]] + [ry] * args.real_weight)
+    print(f"training a size {args.size} model on {len(x)} letters ({len(ex)} EMNIST letters, "
+          f"{len(cx)} EMNIST capitals, {split} synthetic) on {device}")
 
-    model = Net().to(device)
+    model = Net(args.size).to(device)
     opt = torch.optim.Adam(model.parameters(), lr=2e-3)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, 3e-3, total_steps=args.epochs * (len(x) // 256 + 1))
     X = torch.from_numpy(x).float().div(255).unsqueeze(1)
@@ -136,14 +161,16 @@ def main():
             loss.backward()
             opt.step()
             sched.step()
-        print(f"epoch {epoch + 1}: loss {loss.item():.3f}, EMNIST test {accuracy(model, tx, ty, device):.4f}, "
-              f"synthetic test {accuracy(model, sx[split:], sy[split:], device):.4f}")
+        print(f"epoch {epoch + 1}: loss {loss.item():.3f}, EMNIST letters {accuracy(model, tx, ty, device):.4f}, "
+              f"capitals {accuracy(model, ctx, cty, device):.4f}, "
+              f"synthetic {accuracy(model, sx[split:], sy[split:], device):.4f}"
+              + (f", real (trained on) {accuracy(model, rx, ry, device):.4f}" if len(rx) else ""), flush=True)
 
     export(model, args.out)
     print("wrote", os.path.relpath(args.out), os.path.getsize(args.out), "bytes")
 
     # Reference outputs for the Go test, from the float model and from the int8 model
-    q = Net()
+    q = Net(args.size)
     q.load_state_dict({k: torch.from_numpy(quantize(v)[0].astype(np.float32) * quantize(v)[1]).reshape(v.shape)
                        for k, v in model.state_dict().items()})
     sample = torch.from_numpy(sx[split:split + 8]).float().div(255).unsqueeze(1)
@@ -155,7 +182,8 @@ def main():
         f.write(struct.pack("<I", len(sample)))
         f.write(sx[split:split + 8].tobytes())
         f.write(logits.astype("<f4").tobytes())
-    print("int8 model: EMNIST test", accuracy(q.to(device), tx, ty, device))
+    print("int8 model: EMNIST letters", accuracy(q.to(device), tx, ty, device),
+          "capitals", accuracy(q.to(device), ctx, cty, device))
 
 
 if __name__ == "__main__":
