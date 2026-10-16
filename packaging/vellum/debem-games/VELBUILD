@@ -71,7 +71,6 @@ build() {
 
 	cd "$srcdir/Stockfish-$_stockfish/src"
 	cp "$srcdir/$_net" .
-	# The rM1/rM2 SDK has no libatomic, and Stockfish links without it
 	sed -i '/LDFLAGS += -latomic/d' Makefile
 	make -j"$(nproc)" build ARCH="$_sfarch" COMP=gcc CXX="$CXX"
 
